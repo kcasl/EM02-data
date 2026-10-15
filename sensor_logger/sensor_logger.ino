@@ -71,7 +71,7 @@ bool readDHT22(float &temperature, float &humidity) {
   delay(18);
   digitalWrite(PIN_DHT, HIGH);
   delayMicroseconds(40);
-  pinMode(PIN_DHT, INPUT);
+  pinMode(PIN_DHT, INPUT_PULLUP);
 
   if (!waitPin(HIGH, 1000)) {
     return false;
@@ -100,22 +100,24 @@ bool readDHT22(float &temperature, float &humidity) {
     return false;
   }
 
+  // 습도 25.6% 미만, 온도 25.5도 이하는 앞 바이트가 0이다.
+  // 앞 바이트만 쓰면 둘 다 0으로 보인다. 항상 두 바이트를 합친다.
   float temp22 = ((uint16_t)(data[2] & 0x7F) << 8 | data[3]) * 0.1f;
   if (data[2] & 0x80) {
     temp22 = -temp22;
   }
   float hum22 = ((uint16_t)data[0] << 8 | data[1]) * 0.1f;
-  if (hum22 >= 0 && hum22 <= 100 && temp22 >= -40 && temp22 <= 80) {
+  if (hum22 > 0 && hum22 <= 100 && temp22 >= -40 && temp22 <= 80) {
     temperature = temp22;
     humidity = hum22;
     return true;
   }
 
-  // 정수만 보내는 DHT11이면 상위 바이트가 곧 측정값이다.
-  if (data[1] <= 9 && data[3] <= 9 && data[0] <= 100 && data[2] <= 50) {
-    temperature = data[2];
-    humidity = data[0];
-    return true;
+  // DHT11은 정수 바이트가 온도다. 소수 바이트가 0이면 26.0, 27.0처럼만 나온다.
+  if (data[0] <= 100 && data[2] <= 50) {
+    temperature = data[2] + (data[3] & 0x0F) * 0.1f;
+    humidity = data[0] + (data[1] & 0x0F) * 0.1f;
+    return temperature != 0 || humidity != 0;
   }
   return false;
 }
