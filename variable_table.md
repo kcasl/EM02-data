@@ -12,8 +12,8 @@
 | location | 없음 (범주) | 없음 | 설치 위치. 값 `window` |
 | mq135_adc | 1 (무차원, 0–1023) | 없음 | A0, MQ135 모듈 AO. 10비트 ADC 원시값 |
 | mq135_voltage | V | 없음 | `mq135_adc * 5.0 / 1024`. 기준전압 5.0 V 가정 |
-| temperature | °C | `NaN` | A1, DHT11. 정수 분해능. 타임아웃·체크섬 실패면 `NaN` |
-| humidity | %RH | `NaN` | A1, DHT11 상대습도. 정수 분해능. 실패 시 `NaN` |
+| temperature | °C | `NaN` | A1, DHT22. 분해능 0.1°C. 읽기 실패면 `NaN` |
+| humidity | %RH | `NaN` | A1, DHT22 상대습도. 분해능 0.1%RH. 실패 시 `NaN` |
 | light_adc | 1 (무차원, 0–1023) | 없음 | A2. 5V — LDR — A2 — 10 kΩ — GND. 밝을수록 값이 커짐 |
 | light_voltage | V | 없음 | `light_adc * 5.0 / 1024`. 기준전압 5.0 V 가정 |
 | label | 없음 (범주) | 해당 없음 | 이벤트 구간의 이름. 평소는 `none`. 예: `cooking`, `ventilation` |

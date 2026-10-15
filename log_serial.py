@@ -177,7 +177,11 @@ def main() -> None:
     try:
         link = serial.Serial(port, BAUD, timeout=1)
     except serial.SerialException as exc:
-        print(f"포트를 열 수 없습니다: {exc}")
+        text = str(exc)
+        print(f"포트를 열 수 없습니다: {text}")
+        if "Permission" in text or "Access is denied" in text or "액세스가 거부" in text:
+            print("이 COM 포트는 한 프로그램만 열 수 있습니다.")
+            print("아두이노 시리얼 모니터를 닫고 다시 실행하세요. 값은 이 창에 출력됩니다.")
         sys.exit(1)
     # 포트가 열리면 Uno가 리셋된다. 부팅 중 깨진 바이트는 버린다.
     link.reset_input_buffer()
