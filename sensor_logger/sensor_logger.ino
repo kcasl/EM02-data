@@ -35,71 +35,89 @@ const float ADC_STEPS = 1024.0f;
 
 unsigned long lastLogMs = 0;
 
-uint16_t pulseWidth(volatile uint8_t *reg, uint8_t mask, bool level) {
-  uint16_t count = 0;
-  if (level) {
-    while ((*reg & mask) != 0) {
-      if (++count >= 30000) {
-        return 0;
-      }
-    }
-  } else {
-    while ((*reg & mask) == 0) {
-      if (++count >= 30000) {
-        return 0;
-      }
+bool waitPin(uint8_t level, unsigned long timeoutUs) {
+  unsigned long start = micros();
+  while (digitalRead(PIN_DHT) == level) {
+    if (micros() - start > timeoutUs) {
+      return false;
     }
   }
-  return count;
+  return true;
 }
 
-// DHT22: 습도·온도 모두 (상위<<8 | 하위) / 10. 실패 시 false.
+int readDhtByte() {
+  int value = 0;
+  for (uint8_t i = 0; i < 8; i++) {
+    if (!waitPin(LOW, 300)) {
+      return -1;
+    }
+    delayMicroseconds(30);
+    if (digitalRead(PIN_DHT) == HIGH) {
+      value |= (1 << (7 - i));
+    }
+    if (!waitPin(HIGH, 300)) {
+      return -1;
+    }
+  }
+  return value;
+}
+
+// 상위 바이트만 보면 25.5도 이하가 0이 된다. 두 바이트를 합친 뒤 10으로 나눈다.
 bool readDHT22(float &temperature, float &humidity) {
-  uint8_t data[5] = {0, 0, 0, 0, 0};
-  uint16_t lowCount[40];
-  uint16_t highCount[40];
-  uint8_t mask = digitalPinToBitMask(PIN_DHT);
-  volatile uint8_t *reg = portInputRegister(digitalPinToPort(PIN_DHT));
+  uint8_t data[5];
 
   pinMode(PIN_DHT, OUTPUT);
   digitalWrite(PIN_DHT, LOW);
-  delay(2);
+  delay(18);
   digitalWrite(PIN_DHT, HIGH);
   delayMicroseconds(40);
-  pinMode(PIN_DHT, INPUT_PULLUP);
-  delayMicroseconds(10);
+  pinMode(PIN_DHT, INPUT);
 
-  noInterrupts();
-  bool ok = pulseWidth(reg, mask, false) != 0 && pulseWidth(reg, mask, true) != 0;
-  for (uint8_t i = 0; ok && i < 40; i++) {
-    lowCount[i] = pulseWidth(reg, mask, false);
-    highCount[i] = pulseWidth(reg, mask, true);
-    if (lowCount[i] == 0 || highCount[i] == 0) {
-      ok = false;
-    }
-  }
-  interrupts();
-  if (!ok) {
+  if (!waitPin(HIGH, 1000)) {
     return false;
   }
+  if (digitalRead(PIN_DHT) != LOW) {
+    return false;
+  }
+  delayMicroseconds(80);
+  if (digitalRead(PIN_DHT) != HIGH) {
+    return false;
+  }
+  delayMicroseconds(80);
 
-  for (uint8_t i = 0; i < 40; i++) {
-    data[i / 8] <<= 1;
-    if (highCount[i] > lowCount[i]) {
-      data[i / 8] |= 1;
+  for (uint8_t i = 0; i < 5; i++) {
+    int byteValue = readDhtByte();
+    if (byteValue < 0) {
+      return false;
     }
+    data[i] = (uint8_t)byteValue;
   }
   if (data[4] != ((data[0] + data[1] + data[2] + data[3]) & 0xFF)) {
     return false;
   }
-
-  humidity = ((uint16_t)data[0] << 8 | data[1]) * 0.1f;
-  float temp = ((uint16_t)(data[2] & 0x7F) << 8 | data[3]) * 0.1f;
-  if (data[2] & 0x80) {
-    temp = -temp;
+  // 0 다섯 바이트는 체크섬도 0이라 정상 프레임처럼 보인다.
+  if ((data[0] | data[1] | data[2] | data[3]) == 0) {
+    return false;
   }
-  temperature = temp;
-  return true;
+
+  float temp22 = ((uint16_t)(data[2] & 0x7F) << 8 | data[3]) * 0.1f;
+  if (data[2] & 0x80) {
+    temp22 = -temp22;
+  }
+  float hum22 = ((uint16_t)data[0] << 8 | data[1]) * 0.1f;
+  if (hum22 >= 0 && hum22 <= 100 && temp22 >= -40 && temp22 <= 80) {
+    temperature = temp22;
+    humidity = hum22;
+    return true;
+  }
+
+  // 정수만 보내는 DHT11이면 상위 바이트가 곧 측정값이다.
+  if (data[1] <= 9 && data[3] <= 9 && data[0] <= 100 && data[2] <= 50) {
+    temperature = data[2];
+    humidity = data[0];
+    return true;
+  }
+  return false;
 }
 
 float adcToVolt(int adc) {
